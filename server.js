@@ -51,12 +51,14 @@ app.get("/api/logs", async (req, res) => {
 app.get("/api/device/list", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT DISTINCT device_name
+      SELECT DISTINCT
+        device_name,
+        data_type
       FROM device_logs
       ORDER BY device_name
     `);
 
-    res.json(result.rows.map(r => r.device_name));
+    res.json(result.rows);
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -89,6 +91,22 @@ app.get("/api/logs/analog", async (req, res) => {
     FROM device_logs
     WHERE device_name = $1
       AND data_type = 'analog'
+      AND created_at BETWEEN $2 AND $3
+    ORDER BY created_at
+  `, [device, start, end]);
+
+  res.json(result.rows);
+});
+
+// GET /api/logs/number
+app.get("/api/logs/number", async (req, res) => {
+  const { device, start, end } = req.query;
+
+  const result = await pool.query(`
+    SELECT value, created_at
+    FROM device_logs
+    WHERE device_name = $1
+      AND data_type = 'number'
       AND created_at BETWEEN $2 AND $3
     ORDER BY created_at
   `, [device, start, end]);
