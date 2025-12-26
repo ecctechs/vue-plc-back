@@ -80,6 +80,23 @@ app.get("/api/logs/onoff", async (req, res) => {
   res.json(rows.rows);
 });
 
+// GET /api/logs/analog
+app.get("/api/logs/analog", async (req, res) => {
+  const { device, start, end } = req.query;
+
+  const result = await pool.query(`
+    SELECT value, created_at
+    FROM device_logs
+    WHERE device_name = $1
+      AND data_type = 'analog'
+      AND created_at BETWEEN $2 AND $3
+    ORDER BY created_at
+  `, [device, start, end]);
+
+  res.json(result.rows);
+});
+
+
 app.listen(3001, () => {
   console.log("PLC Backend running on port 3001");
 });
