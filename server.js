@@ -40,24 +40,45 @@ app.post("/api/write", async (req, res) => {
   }
 });
 
-app.post("/api/chart/line", async (req, res) => {
-  const { device_name, from, to } = req.body;
-
+app.get("/api/logs", async (req, res) => {
   const result = await pool.query(
-    `
-    SELECT created_at, value
-    FROM device_logs
-    WHERE device_name = $1
-      AND action = 'READ'
-      AND created_at BETWEEN $2 AND $3
-    ORDER BY created_at ASC
-    `,
-    [device_name, from, to]
+    "SELECT * FROM device_logs ORDER BY created_at DESC LIMIT 1000"
   );
-
   res.json(result.rows);
 });
 
+/* ================= DEVICE LIST ================= */
+app.get("/api/device/list", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT DISTINCT device_name
+      FROM device_logs
+      ORDER BY device_name
+    `);
+
+    res.json(result.rows.map(r => r.device_name));
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+});
+
+// GET /api/logs/onoff
+app.get("/api/logs/onoff", async (req, res) => {
+  const { device, start, end } = req.query;
+
+  const rows = await pool.query(`
+    SELECT value, created_at
+    FROM device_logs
+    WHERE device_name = $1
+    AND created_at BETWEEN $2 AND $3
+    ORDER BY created_at
+  `, [device, start, end]);
+
+  res.json(rows.rows);
+});
 
 app.listen(3001, () => {
   console.log("PLC Backend running on port 3001");
