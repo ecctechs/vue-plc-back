@@ -27,6 +27,23 @@ async function saveIfChanged(device, value) {
   await logRead(device, value);
 }
 
+async function saveLog(device, value) {
+  const key = getKey(device);
+
+  // ✅ ON / OFF → log ทุกครั้ง
+  if (device.dataType === "on/off") {
+    await logRead(device, value);
+    lastValues[key] = value;
+    return;
+  }
+
+  // ✅ TYPE อื่น → log เฉพาะเปลี่ยน
+  if (lastValues[key] === value) return;
+
+  lastValues[key] = value;
+  await logRead(device, value);
+}
+
 
 /* ===== READ ===== */
 async function readPLC(device) {
@@ -38,7 +55,7 @@ async function readPLC(device) {
     const res = await client.readCoils(coilAddress, length);
     const value = res.response.body.values[0] ? "ON" : "OFF";
 
-    await saveIfChanged(device, value);
+    await saveLog(device, value);
     return value;
   }
 
