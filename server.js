@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { readPLC, writePLC } = require("./plc/plcClient");
+const { readPLC, writePLC , isWorkingTime} = require("./plc/plcClient");
 const { pool } = require("./db/pg");
 
 const app = express();
@@ -68,19 +68,44 @@ app.get("/api/device/list", async (req, res) => {
 });
 
 // GET /api/logs/onoff
+// app.get("/api/logs/onoff", async (req, res) => {
+//   const { device, start, end } = req.query;
+
+//   const rows = await pool.query(`
+//     SELECT value, created_at
+//     FROM device_logs
+//     WHERE device_name = $1
+//     AND created_at BETWEEN $2 AND $3
+//     ORDER BY created_at
+//   `, [device, start, end]);
+
+//   res.json(rows.rows);
+// });
+
 app.get("/api/logs/onoff", async (req, res) => {
-  const { device, start, end } = req.query;
+  const logs = await pool.query(
+    `SELECT created_at, value
+     FROM device_logs 
+     WHERE device_name = $1
+       AND created_at BETWEEN $2 AND $3
+     ORDER BY created_at`,
+    [req.query.device, req.query.start, req.query.end]
+  );
 
-  const rows = await pool.query(`
-    SELECT value, created_at
-    FROM device_logs
-    WHERE device_name = $1
-    AND created_at BETWEEN $2 AND $3
-    ORDER BY created_at
-  `, [device, start, end]);
+  const wt = await pool.query(
+    `SELECT working_days, start_time, end_time
+     FROM working_time WHERE id = 1`
+  );
 
-  res.json(rows.rows);
+  const config = wt.rows[0];
+
+  const filtered = logs.rows.filter(l =>
+    isWorkingTime(new Date(l.created_at), config)
+  );
+
+  res.json(filtered);
 });
+
 
 // GET /api/logs/analog
 app.get("/api/logs/analog", async (req, res) => {
@@ -112,6 +137,47 @@ app.get("/api/logs/number", async (req, res) => {
   `, [device, start, end]);
 
   res.json(result.rows);
+});
+
+// update working time (global)
+app.put("/api/working-time", async (req, res) => {
+  const { days, start, end } = req.body;
+
+  await pool.query(
+    `
+    UPDATE working_time
+    SET
+      working_days = $1,
+      start_time   = $2,
+      end_time     = $3,
+      updated_at   = NOW()
+    WHERE id = 1
+    `,
+    [days, start, end]
+  );
+
+  res.json({ success: true });
+});
+
+// load working time
+app.get("/api/working-time", async (req, res) => {
+  const result = await pool.query(
+    `SELECT working_days, start_time, end_time
+     FROM working_time
+     WHERE id = 1`
+  );
+
+  if (result.rows.length === 0) {
+    return res.json(null);
+  }
+
+  const row = result.rows[0];
+
+  res.json({
+    days: row.working_days,
+    start: row.start_time.slice(0, 5), // HH:mm
+    end: row.end_time.slice(0, 5),     // HH:mm
+  });
 });
 
 

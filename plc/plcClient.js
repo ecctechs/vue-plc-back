@@ -142,6 +142,19 @@ async function writePLC(device, value) {
   }
 }
 
+function isWorkingTime(date, config) {
+  const dayMap = ['sun','mon','tue','wed','thu','fri','sat'];
 
-module.exports = { readPLC, writePLC };
+  const day = dayMap[date.getDay()];
+  const time = date.toTimeString().slice(0, 5); // HH:mm
+
+  if (!config.working_days.includes(day)) return false;
+  if (time < config.start_time) return false;
+  if (time > config.end_time) return false;
+
+  return true;
+}
+
+
+module.exports = { readPLC, writePLC , isWorkingTime };
 
