@@ -85,27 +85,33 @@ app.get("/api/device/list", async (req, res) => {
 
 app.get("/api/logs/onoff", async (req, res) => {
   console.log("TEST")
-  // const logs = await pool.query(
-  //   `SELECT created_at, value
-  //    FROM device_logs 
-  //    WHERE device_name = $1
-  //      AND created_at BETWEEN $2 AND $3
-  //    ORDER BY created_at`,
-  //   [req.query.device, req.query.start, req.query.end]
-  // );
+  const logs = await pool.query(
+    `SELECT created_at, value
+     FROM device_logs 
+     WHERE device_name = $1
+       AND created_at BETWEEN $2 AND $3
+     ORDER BY created_at`,
+    [req.query.device, req.query.start, req.query.end]
+  );
 
-  // const wt = await pool.query(
-  //   `SELECT working_days, start_time, end_time
-  //    FROM working_time WHERE id = 1`
-  // );
+  console.log("logs",logs)
 
-  // const config = wt.rows[0];
+  const wt = await pool.query(
+    `SELECT working_days, start_time, end_time
+     FROM working_time WHERE id = 1`
+  );
 
-  // const filtered = logs.rows.filter(l =>
-  //   isWorkingTime(new Date(l.created_at), config)
-  // );
+    console.log("wt",wt)
 
-  // res.json(filtered);
+  const config = wt.rows[0];
+
+  const filtered = logs.rows.filter(l =>
+    isWorkingTime(new Date(l.created_at), config)
+  );
+
+     console.log("filtered",filtered)
+
+  res.json(filtered);
 });
 
 
