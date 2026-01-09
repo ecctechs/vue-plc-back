@@ -211,12 +211,22 @@ app.get("/api/performance", async (req, res) => {
     WHERE id = 1
   `);
 
+  if (wt.rowCount === 0) {
+    // ❗ ไม่มี working time
+    return res.json([]);
+  }
+
   const workingConfig = wt.rows[0];
 
   /* ===== 3. Filter by working time ===== */
   const validLogs = logsResult.rows.filter(l =>
     isWorkingTime(new Date(l.created_at), workingConfig)
   );
+
+  if (validLogs.length === 0) {
+    // ❗ ไม่มี log ในเวลางาน
+    return res.json([]);
+  }
 
   /* ===== 4. Create buckets ===== */
   const buckets = createBuckets(new Date(start), new Date(end), group);
@@ -233,15 +243,17 @@ app.get("/api/performance", async (req, res) => {
   });
 
   /* ===== 6. Calculate % ===== */
-  const result = Object.values(buckets).map(b => {
-    const total = b.on + b.off;
-    return {
-      period: b.label,
-      onPercent: total ? +(b.on / total * 100).toFixed(2) : 0,
-      offPercent: total ? +(b.off / total * 100).toFixed(2) : 0,
-      samples: total,
-    };
-  });
+  const result = Object.values(buckets)
+    .filter(b => b.on + b.off > 0) // ⭐ กัน bucket ว่าง
+    .map(b => {
+      const total = b.on + b.off;
+      return {
+        period: b.label,
+        onPercent: +(b.on / total * 100).toFixed(2),
+        offPercent: +(b.off / total * 100).toFixed(2),
+        samples: total,
+      };
+    });
 
   res.json(result);
 });
