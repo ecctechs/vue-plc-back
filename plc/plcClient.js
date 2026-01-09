@@ -72,8 +72,8 @@ async function readPLC(device) {
     const value = res.response.body.values[0] ? "ON" : "OFF";
 
 
-    // await saveLog(device, value);
-    await saveIfChanged(device, value);
+    await saveLog(device, value);
+    // await saveIfChanged(device, value);
 
     // ALERT
     const workingTime = await getWorkingTime();
