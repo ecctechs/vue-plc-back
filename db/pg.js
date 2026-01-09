@@ -1,11 +1,11 @@
 const { Pool } = require("pg");
 
 const pool = new Pool({
-  host: "localhost",
+  host: "dpg-d5g7khfpm1nc73e0netg-a.singapore-postgres.render.com",
   port: 5432,
-  user: "postgres",      // แก้ตามเครื่องคุณ
-  password: "1234",  // แก้ตามเครื่องคุณ
-  database: "plc",
+  user: "vue_plc_postgres_db_user",      // แก้ตามเครื่องคุณ
+  password: "XlPL0fsDtg8XqHSxTOCfQiphAkRucG2e",  // แก้ตามเครื่องคุณ
+  database: "vue_plc_postgres_db",
 });
 
 async function logRead(device, value) {
