@@ -1,10 +1,6 @@
 const net = require("net");
 const Modbus = require("jsmodbus");
 const { logRead , logWrite } = require("../db/pg");
-const { isAlert } = require("../alert/isAlert");
-const { getLastAlert } = require("../alert/isAlertCooldown");
-const { sendEmail } = require("../alert/sendEmail");
-const { pool } = require("../db/pg");
 
 const socket = new net.Socket();
 const client = new Modbus.client.TCP(socket, 1);
@@ -61,11 +57,6 @@ async function readPLC(device) {
 
     // await saveLog(device, value);
     await saveIfChanged(device, value);
-
-    // ALERT
-    const workingTime = await getWorkingTime();
-    await handleAlert(device, value, workingTime);
-
     return value;
   }
 
@@ -75,11 +66,6 @@ async function readPLC(device) {
     const value = res.response.body.values[0];
 
     await saveIfChanged(device, value);
-
-    // ALERT
-    const workingTime = await getWorkingTime();
-    await handleAlert(device, value, workingTime);
-
     return value;
   }
 
@@ -94,11 +80,6 @@ async function readPLC(device) {
     const value = `${integerPart}.${decimal}`;
 
     await saveIfChanged(device, value);
-
-    // ALERT
-    const workingTime = await getWorkingTime();
-    await handleAlert(device, value, workingTime);
-
     return value;
   }
 
@@ -175,74 +156,6 @@ function isWorkingTime(date, config) {
   return true;
 }
 
-async function getWorkingTime() {
-  const res = await pool.query(`
-    SELECT working_days, start_time, end_time
-    FROM working_time
-    WHERE id = 1
-  `);
-
-  return res.rows[0];
-}
-
-async function handleAlert(device, value, workingTime) {
-  const alert = isAlert(device, value, null, workingTime);
-  if (!alert) return;
-
-  const last = await getLastAlert(device.name, alert.type);
-
-  // ==========================
-  // 🔹 คำนวณ % เปลี่ยนแปลง
-  // ==========================
-  let shouldSend = false;
-
-  if (!last) {
-    // ไม่เคยส่งมาก่อน → ส่ง
-    shouldSend = true;
-  } else {
-    const diffPercent =
-      Math.abs(value - last.value) / last.value * 100;
-
-    // ⭐ กำหนด threshold ที่นี่
-    if (diffPercent >= 50) {
-      shouldSend = true;
-    }
-
-    // ⏳ cooldown ปกติ (เช่น 10 นาที)
-    const diffMin = (Date.now() - last.time) / 1000 / 60;
-    if (diffMin >= 10) {
-      shouldSend = true;
-    }
-  }
-
-  if (!shouldSend) {
-    console.log("⏳ Alert suppressed (cooldown / small change)");
-    return;
-  }
-
-  // ==========================
-  // ✅ SAVE + SEND
-  // ==========================
-  await pool.query(`
-    INSERT INTO alert_logs
-    (device_name, data_type, alert_type, current_value, message)
-    VALUES ($1,$2,$3,$4,$5)
-  `, [
-    device.name,
-    device.dataType,
-    alert.type,
-    value,
-    alert.message
-  ]);
-
-  await sendEmail(
-    device.alert.emails,
-    `PLC ALERT: ${device.name}`,
-    alert.message + ` (value=${value})`
-  );
-
-  console.log("📧 ALERT SENT");
-}
 
 module.exports = { readPLC, writePLC , isWorkingTime };
 
