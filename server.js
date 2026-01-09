@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const { readPLC, writePLC , isWorkingTime} = require("./plc/plcClient");
 const { pool } = require("./db/pg");
+require("dotenv").config();
 
 const app = express();
 app.use(cors());
@@ -469,6 +470,16 @@ app.get("/api/performance/number", async (req, res) => {
   });
 
   res.json(result);
+});
+
+app.get("/api/alerts", async (req, res) => {
+  const result = await pool.query(`
+    SELECT *
+    FROM alert_logs
+    ORDER BY created_at DESC
+    LIMIT 500
+  `);
+  res.json(result.rows);
 });
 
 
