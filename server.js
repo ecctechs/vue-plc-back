@@ -69,50 +69,44 @@ app.get("/api/device/list", async (req, res) => {
 });
 
 // GET /api/logs/onoff
-// app.get("/api/logs/onoff", async (req, res) => {
-//   const { device, start, end } = req.query;
-
-//   const rows = await pool.query(`
-//     SELECT value, created_at
-//     FROM device_logs
-//     WHERE device_name = $1
-//     AND created_at BETWEEN $2 AND $3
-//     ORDER BY created_at
-//   `, [device, start, end]);
-
-//   res.json(rows.rows);
-// });
-
 app.get("/api/logs/onoff", async (req, res) => {
-  console.log("TEST")
-  const logs = await pool.query(
-    `SELECT created_at, value
-     FROM device_logs 
-     WHERE device_name = $1
-       AND created_at BETWEEN $2 AND $3
-     ORDER BY created_at`,
-    [req.query.device, req.query.start, req.query.end]
-  );
+  const { device, start, end } = req.query;
 
-  console.log("logs",logs)
+  const rows = await pool.query(`
+    SELECT value, created_at
+    FROM device_logs
+    WHERE device_name = $1
+    AND created_at BETWEEN $2 AND $3
+    ORDER BY created_at
+  `, [device, start, end]);
 
-  const wt = await pool.query(
-    `SELECT working_days, start_time, end_time
-     FROM working_time WHERE id = 1`
-  );
-
-    console.log("wt",wt)
-
-  const config = wt.rows[0];
-
-  const filtered = logs.rows.filter(l =>
-    isWorkingTime(new Date(l.created_at), config)
-  );
-
-     console.log("filtered",filtered)
-
-  res.json(filtered);
+  res.json(rows.rows);
 });
+
+// app.get("/api/logs/onoff", async (req, res) => {
+//   console.log("TEST")
+//   const logs = await pool.query(
+//     `SELECT created_at, value
+//      FROM device_logs 
+//      WHERE device_name = $1
+//        AND created_at BETWEEN $2 AND $3
+//      ORDER BY created_at`,
+//     [req.query.device, req.query.start, req.query.end]
+//   );
+
+//   const wt = await pool.query(
+//     `SELECT working_days, start_time, end_time
+//      FROM working_time WHERE id = 1`
+//   );
+
+//   const config = wt.rows[0];
+
+//   const filtered = logs.rows.filter(l =>
+//     isWorkingTime(new Date(l.created_at), config)
+//   );
+
+//   res.json(filtered);
+// });
 
 
 // GET /api/logs/analog
