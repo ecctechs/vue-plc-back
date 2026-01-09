@@ -6,6 +6,9 @@ const pool = new Pool({
   user: "vue_plc_postgres_db_user",      // แก้ตามเครื่องคุณ
   password: "XlPL0fsDtg8XqHSxTOCfQiphAkRucG2e",  // แก้ตามเครื่องคุณ
   database: "vue_plc_postgres_db",
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 async function logRead(device, value) {
