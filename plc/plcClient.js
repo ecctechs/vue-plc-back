@@ -9,7 +9,7 @@ const { pool } = require("../db/pg");
 const socket = new net.Socket();
 const client = new Modbus.client.TCP(socket, 1);
 
-// socket.connect({ host: "192.168.3.250", port: 502 });
+socket.connect({ host: "192.168.3.250", port: 502 });
 
 // ⭐ เก็บค่าล่าสุด
 const lastValues = {};
