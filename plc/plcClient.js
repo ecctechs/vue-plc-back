@@ -9,7 +9,19 @@ const { pool } = require("../db/pg");
 const socket = new net.Socket();
 const client = new Modbus.client.TCP(socket, 1);
 
-// socket.connect({ host: "192.168.3.250", port: 502 });
+socket.connect({ host: "192.168.3.250", port: 502 });
+
+socket.on("connect", () => {
+  console.log("✅ PLC connected");
+});
+
+socket.on("error", (err) => {
+  console.error("❌ PLC socket error:", err.message);
+});
+
+socket.on("close", () => {
+  console.warn("⚠️ PLC connection closed");
+});
 
 // ⭐ เก็บค่าล่าสุด
 const lastValues = {};
