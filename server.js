@@ -69,43 +69,44 @@ app.get("/api/device/list", async (req, res) => {
 });
 
 // GET /api/logs/onoff
-// app.get("/api/logs/onoff", async (req, res) => {
-//   const { device, start, end } = req.query;
-
-//   const rows = await pool.query(`
-//     SELECT value, created_at
-//     FROM device_logs
-//     WHERE device_name = $1
-//     AND created_at BETWEEN $2 AND $3
-//     ORDER BY created_at
-//   `, [device, start, end]);
-
-//   res.json(rows.rows);
-// });
-
 app.get("/api/logs/onoff", async (req, res) => {
-  const logs = await pool.query(
-    `SELECT created_at, value
-     FROM device_logs 
-     WHERE device_name = $1
-       AND created_at BETWEEN $2 AND $3
-     ORDER BY created_at`,
-    [req.query.device, req.query.start, req.query.end]
-  );
+  const { device, start, end } = req.query;
 
-  const wt = await pool.query(
-    `SELECT working_days, start_time, end_time
-     FROM working_time WHERE id = 1`
-  );
+  const rows = await pool.query(`
+    SELECT value, created_at
+    FROM device_logs
+    WHERE device_name = $1
+    AND created_at BETWEEN $2 AND $3
+    ORDER BY created_at
+  `, [device, start, end]);
 
-  const config = wt.rows[0];
-
-  const filtered = logs.rows.filter(l =>
-    isWorkingTime(new Date(l.created_at), config)
-  );
-
-  res.json(filtered);
+  res.json(rows.rows);
 });
+
+// app.get("/api/logs/onoff", async (req, res) => {
+//   console.log("TEST")
+//   const logs = await pool.query(
+//     `SELECT created_at, value
+//      FROM device_logs 
+//      WHERE device_name = $1
+//        AND created_at BETWEEN $2 AND $3
+//      ORDER BY created_at`,
+//     [req.query.device, req.query.start, req.query.end]
+//   );
+
+//   const wt = await pool.query(
+//     `SELECT working_days, start_time, end_time
+//      FROM working_time WHERE id = 1`
+//   );
+
+//   const config = wt.rows[0];
+
+//   const filtered = logs.rows.filter(l =>
+//     isWorkingTime(new Date(l.created_at), config)
+//   );
+
+//   res.json(filtered);
+// });
 
 
 // GET /api/logs/analog
@@ -210,12 +211,22 @@ app.get("/api/performance", async (req, res) => {
     WHERE id = 1
   `);
 
+  if (wt.rowCount === 0) {
+    // ❗ ไม่มี working time
+    return res.json([]);
+  }
+
   const workingConfig = wt.rows[0];
 
   /* ===== 3. Filter by working time ===== */
   const validLogs = logsResult.rows.filter(l =>
     isWorkingTime(new Date(l.created_at), workingConfig)
   );
+
+  if (validLogs.length === 0) {
+    // ❗ ไม่มี log ในเวลางาน
+    return res.json([]);
+  }
 
   /* ===== 4. Create buckets ===== */
   const buckets = createBuckets(new Date(start), new Date(end), group);
@@ -232,15 +243,17 @@ app.get("/api/performance", async (req, res) => {
   });
 
   /* ===== 6. Calculate % ===== */
-  const result = Object.values(buckets).map(b => {
-    const total = b.on + b.off;
-    return {
-      period: b.label,
-      onPercent: total ? +(b.on / total * 100).toFixed(2) : 0,
-      offPercent: total ? +(b.off / total * 100).toFixed(2) : 0,
-      samples: total,
-    };
-  });
+  const result = Object.values(buckets)
+    .filter(b => b.on + b.off > 0) // ⭐ กัน bucket ว่าง
+    .map(b => {
+      const total = b.on + b.off;
+      return {
+        period: b.label,
+        onPercent: +(b.on / total * 100).toFixed(2),
+        offPercent: +(b.off / total * 100).toFixed(2),
+        samples: total,
+      };
+    });
 
   res.json(result);
 });
@@ -323,7 +336,7 @@ app.get("/api/performance/analog", async (req, res) => {
     return res.status(400).json({ message: "missing params" });
   }
 
-  /* 1. Load logs */
+  /* ===== 1. Load logs ===== */
   const logsResult = await pool.query(
     `
     SELECT value, created_at
@@ -336,11 +349,39 @@ app.get("/api/performance/analog", async (req, res) => {
     [device, start, end]
   );
 
-  /* 2. Create buckets */
-  const buckets = createAnalogBuckets(new Date(start), new Date(end), group);
+  /* ===== 2. Load working time ===== */
+  const wt = await pool.query(`
+    SELECT working_days, start_time, end_time
+    FROM working_time
+    WHERE id = 1
+  `);
 
-  /* 3. Fill buckets */
-  logsResult.rows.forEach(l => {
+  // ❗ ไม่มี working time → ไม่โชว์ performance
+  if (wt.rowCount === 0) {
+    return res.json([]);
+  }
+
+  const workingConfig = wt.rows[0];
+
+  /* ===== 3. Filter by working time ===== */
+  const validLogs = logsResult.rows.filter(l =>
+    isWorkingTime(new Date(l.created_at), workingConfig)
+  );
+
+  // ❗ ไม่มีข้อมูลในเวลางาน
+  if (validLogs.length === 0) {
+    return res.json([]);
+  }
+
+  /* ===== 4. Create buckets ===== */
+  const buckets = createAnalogBuckets(
+    new Date(start),
+    new Date(end),
+    group
+  );
+
+  /* ===== 5. Fill buckets ===== */
+  validLogs.forEach(l => {
     const d = new Date(l.created_at);
     const key = getBucketKey(d, group);
 
@@ -352,30 +393,24 @@ app.get("/api/performance/analog", async (req, res) => {
     buckets[key].values.push(v);
   });
 
-  /* 4. Calculate */
-  const result = Object.values(buckets).map(b => {
-    if (!b.values.length) {
+  /* ===== 6. Calculate avg / min / max ===== */
+  const result = Object.values(buckets)
+    .filter(b => b.values.length > 0) // ⭐ ไม่ส่ง bucket ว่าง
+    .map(b => {
+      const sum = b.values.reduce((a, c) => a + c, 0);
+
       return {
         period: b.label,
-        avg: null,
-        min: null,
-        max: null,
-        samples: 0,
+        avg: +(sum / b.values.length).toFixed(2),
+        min: Math.min(...b.values),
+        max: Math.max(...b.values),
+        samples: b.values.length,
       };
-    }
-
-    const sum = b.values.reduce((a, c) => a + c, 0);
-    return {
-      period: b.label,
-      avg: +(sum / b.values.length).toFixed(2),
-      min: Math.min(...b.values),
-      max: Math.max(...b.values),
-      samples: b.values.length,
-    };
-  });
+    });
 
   res.json(result);
 });
+
 
 function createAnalogBuckets(start, end, group) {
   const buckets = {};
@@ -423,6 +458,7 @@ app.get("/api/performance/number", async (req, res) => {
     return res.status(400).json({ message: "missing params" });
   }
 
+  /* ===== 1. Load logs ===== */
   const logsResult = await pool.query(
     `
     SELECT value, created_at
@@ -435,9 +471,39 @@ app.get("/api/performance/number", async (req, res) => {
     [device, start, end]
   );
 
-  const buckets = createAnalogBuckets(new Date(start), new Date(end), group);
+  /* ===== 2. Load working time ===== */
+  const wt = await pool.query(`
+    SELECT working_days, start_time, end_time
+    FROM working_time
+    WHERE id = 1
+  `);
 
-  logsResult.rows.forEach(l => {
+  // ❗ ไม่มี working time → ไม่แสดง performance
+  if (wt.rowCount === 0) {
+    return res.json([]);
+  }
+
+  const workingConfig = wt.rows[0];
+
+  /* ===== 3. Filter by working time ===== */
+  const validLogs = logsResult.rows.filter(l =>
+    isWorkingTime(new Date(l.created_at), workingConfig)
+  );
+
+  // ❗ ไม่มีข้อมูลในเวลางาน
+  if (validLogs.length === 0) {
+    return res.json([]);
+  }
+
+  /* ===== 4. Create buckets ===== */
+  const buckets = createAnalogBuckets(
+    new Date(start),
+    new Date(end),
+    group
+  );
+
+  /* ===== 5. Fill buckets ===== */
+  validLogs.forEach(l => {
     const d = new Date(l.created_at);
     const key = getBucketKey(d, group);
 
@@ -449,29 +515,24 @@ app.get("/api/performance/number", async (req, res) => {
     buckets[key].values.push(v);
   });
 
-  const result = Object.values(buckets).map(b => {
-    if (!b.values.length) {
+  /* ===== 6. Calculate avg / min / max ===== */
+  const result = Object.values(buckets)
+    .filter(b => b.values.length > 0) // ⭐ ไม่ส่ง bucket ว่าง
+    .map(b => {
+      const sum = b.values.reduce((a, c) => a + c, 0);
+
       return {
         period: b.label,
-        avg: null,
-        min: null,
-        max: null,
-        samples: 0,
+        avg: +(sum / b.values.length).toFixed(2),
+        min: Math.min(...b.values),
+        max: Math.max(...b.values),
+        samples: b.values.length,
       };
-    }
-
-    const sum = b.values.reduce((a, c) => a + c, 0);
-    return {
-      period: b.label,
-      avg: +(sum / b.values.length).toFixed(2),
-      min: Math.min(...b.values),
-      max: Math.max(...b.values),
-      samples: b.values.length,
-    };
-  });
+    });
 
   res.json(result);
 });
+
 
 app.get("/api/alerts", async (req, res) => {
   const result = await pool.query(`

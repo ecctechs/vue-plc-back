@@ -11,6 +11,18 @@ const client = new Modbus.client.TCP(socket, 1);
 
 socket.connect({ host: "192.168.3.250", port: 502 });
 
+socket.on("connect", () => {
+  console.log("✅ PLC connected");
+});
+
+socket.on("error", (err) => {
+  console.error("❌ PLC socket error:", err.message);
+});
+
+socket.on("close", () => {
+  console.warn("⚠️ PLC connection closed");
+});
+
 // ⭐ เก็บค่าล่าสุด
 const lastValues = {};
 
@@ -60,8 +72,8 @@ async function readPLC(device) {
     const value = res.response.body.values[0] ? "ON" : "OFF";
 
 
-    // await saveLog(device, value);
-    await saveIfChanged(device, value);
+    await saveLog(device, value);
+    // await saveIfChanged(device, value);
 
     // ALERT
     const workingTime = await getWorkingTime();
